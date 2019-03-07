@@ -26,108 +26,82 @@ class Node:
 class Tree:
 
 	def __init__(self):
-		self.root = self.add_node()
+		self.root = None
 		self.data = training_data
 		self.target_attribute = training_data_column_values[-1]
 		self.feature_list = training_data_column_values.remove(self.target_attribute)
 		self.current_node = None
-
+		self.current_entropy = None
+		# call build_tree to start building the tree
+		self.build_tree()
 	
-	# feature_to_split = choose_the_best_feature()
-	# traverse till the leaf and add the node to the corresponding leaf
-	def add_node(self, node):
-		# determine if the root exists
-		if self.current_node == None:
-			root_name = self.choose_the_best_feature()	
+	def build_tree(self):
+		''' stop building the tree if either all the features 
+			are splitted or the data set doesn't contain any feature'''
+		if len(self.feature_list) == 0:
+			return
+		else:
+			# determine if the root exists
+			if self.current_node == None:
+				root_name = self.choose_the_best_feature()
+				self.root = Node(name = root_name)
+				self.current_node = self.root
+				self.feature_list.remove(root_name)
+				build_tree()
+			else:
+				@TODO
+				''' Stop splitting the node if pure'''
+
+				# split the current feature by values and
+				# create independent dataframes
+				data_split = self.data.groupby(self.current_node.name)
+				splitted_data_frames = [data_split.get_group(value) for value in data_split.groups]
+				for data_frame in splitted_data_frames:
+
+
 
 	# Return the next attribute to split based on
 	# the information gain calculation
-	def choose_the_best_feature(self):
-		entrophy = self.calculate_entrophy_list()
+	def choose_the_best_feature(self, data_with_targets):
+		''' calculate the E(S) of the current (splitted) dataframe '''
+		self.current_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
+		''' get the max value tuple based on the first tuple
+		    value(information gain) in a list of tuples, then get
+		    the feature name associated with this value '''
+		return max([(information_gain(feature), feature) for feature in self.feature_list], key = lambda feature: feature[0])[1]
 
-		# return max(IG_list)
-		pass
-
-	def calculate_entropy(data_list):
-		# data_list includes all the target values 
-		# for the current value under the feature
+	def calculate_entropy(target_list):
+		# count the target values by value
+		cnt = Counter(target for target in target_list)
+		num_of_instances = len(target_list)
+		ratios = [value / num_of_instances for value in cnt.values()]
+		# calculate entropy
 		entropy = 0
-		cnt = Counter(target for target in data_list)
-		total_count = len(data_list)
-		for target in cnt:
-			ratio = cnt[target]/total
-			entropy += -ratio * math.log(posProb, 2)
+		for ratio in ratios:
+			entropy += -ratio * math.log(ratio, 2)
 		return entropy
-		
-	def calculate_entrophy_list(self, groupped_data):
-		# groupped data belongs to one particular 
-		# feature of the splitted node
-		for feature in self.feature_list:
-			data_split = groupped_data.groupby(feature)
 
-	def calculate_variance_impurity(self):
-		pass
+	# def calculate_variance_impurity(self):
+	# 	pass
 
-	def calculate_information_gain(self, old_entrophy):
-		pass	
+	def information_gain(self, feature_to_split):
+		# split the data into groups of values by an attribute
+		data_split = self.data.groupby(feature_to_split)
+		'''calculate the entropy of this atrribute
+		   First - use calculate_entropy() for each group of data to
+		   get its entropy, then an anonymous lambda function is 
+		   used to get the ratio for each group.
+		   data_aggregate is the dataFrame storing these values.
+		   ''' 
+		data_aggregate = data_split.agg({self.target_attribute : [self.calculate_entropy, lambda group: len(group)/len(self.data)] })[self.target_attribute]
+		data_aggregate.columns = ['Entropy', 'Ratios']
+		'''Second - an weighted sum of the product of the entropy 
+		   and the value of each value is the entropy of this feature'''
+		entropy_of_the_feature = sum(data_aggregate['Entropy'] * data_aggregate['Ratios'])
+		# old_entropy = self.calculate_entropy(self.data[self.target_attribute])
+		return (self.current_entropy - entropy_of_the_feature)
 
 	def print_decision_tree():
 		# start from the root using pre-order traversal
 		# to print out the decision tree
 		pass
-
-	def calculateEntropyOfList(list):  
-    cnt = Counter(x for x in list)
-    totalInstances = len(list)
-    proportionOfInstances = [x / totalInstances for x in cnt.values()]
-    sumOfEntropies=0
-    for x in proportionOfInstances:
-        sumOfEntropies += -x*math.log(x,2)
-    return sumOfEntropies
-
-	root = add_root()
-	root = self.current_node
-
-	def calculateEntropyOfList(list):  
-		cnt = Counter(x for x in list)
-		totalInstances = len(list)
-		proportionOfInstances = [x / totalInstances for x in cnt.values()]
-		sumOfEntropies=0
-		for x in proportionOfInstances:
-			sumOfEntropies += -x*math.log(x,2)
-		return sumOfEntropies
-
-	def calculateInformationGain(trainingData, attributeToSplitOn, targetAttribute):
-		grpByAttrbToSplitOn = trainingData.groupby(attributeToSplitOn)   
-	
-		# Group data by attribute to split on and apply aggregate function to each group on targetAttribute column
-		aggregatedData = grpByAttrbToSplitOn.agg({targetAttribute : [calculateEntropyOfList, lambda x: len(x)/(len(trainingData.index))] })[targetAttribute]   
-
-		aggregatedData.columns = ['Entropy', 'ProportionOfInstances']
-		
-		newEntropy = sum( aggregatedData['Entropy'] * aggregatedData['ProportionOfInstances'] )
-		oldEntropy = calculateEntropyOfList(trainingData[targetAttribute])
-		return oldEntropy-newEntropy
-	
-	def treeByInformationGainHeuristic(trainingData,targetAttribute,allAttributesList):
-    
-		#calculate info gain for all columns in given data except 'Class'. Pick the one with max gain
-		infoGain=[calculateInformationGain(trainingData,x,targetAttribute) for x in allAttributesList]
-		indexOfMaxGain=infoGain.index(max(infoGain))
-		bestAttrbToSplitOn=allAttributesList[indexOfMaxGain]
-		#how to create a tree and store all nodes and parents ?????????
-		node = add_node(parent=self.current_node, name=bestAttrbToSplitOn)
-		node = self.current_node
-
-		remainingAttrbList=[x for x in allAttributesList if x!=bestAttrbToSplitOn]
-
-		for attributeIndex,dataSubset in trainingData.groupby(bestAttrbToSplitOn):
-
-			# Recursive call with smaller dataset 
-			subtree= treeByInformationGainHeuristic(dataSubset,targetAttribute,remainingAttrbList)
-			
-		return tree
-
-
-tree = Tree()
-print(tree.root.negChild)
