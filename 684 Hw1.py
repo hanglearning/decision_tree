@@ -59,14 +59,11 @@ class Tree:
 			entropy += -ratio * math.log(posProb, 2)
 		return entropy
 		
-	
-	def calculate_entrophy_list(self):
-		# if the current node hasn't been selected, this means 
-		# the tree has no root and we are to calculate the 
-		# entropy of the original whole data to select the root
-		if self.current_node = None:
-			old_entrophy = 
-		pass
+	def calculate_entrophy_list(self, groupped_data):
+		# groupped data belongs to one particular 
+		# feature of the splitted node
+		for feature in self.feature_list:
+			data_split = groupped_data.groupby(feature)
 
 	def calculate_variance_impurity(self):
 		pass
