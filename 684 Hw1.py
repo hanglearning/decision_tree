@@ -2,27 +2,28 @@ import pandas as pd
 import sys
 from collections import Counter
 import math
+import copy
 
 # Input parameters
-L = int(sys.argv[1])
-K = int(sys.argv[2])
-training_set_path = sys.argv[3]
-validation_set_path = sys.argv[4]
-test_set_path = sys.argv[5]
-to_print = sys.argv[6]
+# L = int(sys.argv[1])
+# K = int(sys.argv[2])
+# training_set_path = sys.argv[3]
+# validation_set_path = sys.argv[4]
+# test_set_path = sys.argv[5]
+# to_print = sys.argv[6]
 
 # read in the training data
-training_data = pd.read_csv(training_set_path)
+training_data = pd.read_csv('/Users/chenhang91/Downloads/data_sets1/training_set.csv',delimiter=',')
 training_data_column_values = list(training_data.columns.values)
 
 class Node:
 
-	def __init__(self, name=None, parent=None):
+	def __init__(self, name=None, parent=None, value_direction=None):
 		self.name = name
-		self.parent = parent
-		self.chidren_list = None
-		self.value_direction = None
-		self.is_leaf = False
+		self.parent = parent #
+		self.chidren_list = []
+		self.value_direction = value_direction
+		self.is_leaf = False # redundant, since can be verified if self.name==None. but a good practice to have
 		self.leaf_target = None # only assign value when is_leaf is True
 
 class Tree:
@@ -31,7 +32,7 @@ class Tree:
 		self.root = None
 		self.data = training_data
 		self.target_attribute = training_data_column_values[-1]
-		self.feature_list = training_data_column_values.remove(self.target_attribute)
+		self.feature_list = training_data_column_values[:-1]
 		self.current_node = None
 		self.current_entropy = None
 		self.fringe = [] # Keep track of the nodes to be splitted
@@ -40,47 +41,65 @@ class Tree:
 		self.build_tree()
 	
 	def build_tree(self):
-		''' stop building the tree if either all the features 
-			are splitted or the data set doesn't contain any feature'''
-		if len(self.feature_list) == 0:
-			return
-		else:
-			# determine if the root exists
-			if self.current_node == None:
-				self.root = Node()
-				self.current_node = self.root
-				self.root.name = self.choose_the_best_feature(self.data)
-				# special case: when the whole data set is already pure
-				if self.root.name == None:
-					self.root.is_leaf = True
-					self.root.leaf_target = self.data[self.target_attribute][0]
-					return
-				else:
-					# start to recursively build the tree
-					self.feature_list.remove(self.root.name)
-					self.build_tree()
+		
+		# determine if the root exists
+		if self.current_node == None:
+			self.root = Node()
+			self.current_node = self.root
+			self.root.name = self.choose_the_best_feature(self.data, self.feature_list)
+			# special case: when the whole data set is already pure
+			if self.root.name == None:
+				self.root.is_leaf = True
+				self.root.leaf_target = self.data[self.target_attribute][0]
+				return
 			else:
-				# split the current feature by values and
-				# create independent dataframes
-				data_split = self.data.groupby(self.current_node.name)
-				splitted_data_frames = [data_split.get_group(value) for value in data_split.groups]
-				for data_frame in splitted_data_frames:
-					new_node = Node(name=self.choose_the_best_feature(data_frame), parent=self.current_node)
-					if new_node.name == None:
-						# data set under the current value of
-						# the splitted feature is pure, no more splitting
-						# new_node becomes a leaf node
-						new_node.is_leaf = True
-						new_node.leaf_target = data_frame[self.target_attribute][0]
-					else:
-						
-					
+				self.feature_list.remove(self.root.name)
+				# put the node to the frienge ready to split
+				self.fringe.append(self.current_node)
+				# start to recursively build the tree
+				self.build_tree()
+		else:
+			''' stop building the tree if all the features necessary to be splitted
+			are all splitted (either a pure data set is found under the branch(the leaf node is found in this branch) or this branch has used up all the features in the list. This is tracked by self.fringe)'''
+			if len(self.fringe) == 0:
+				return
+			else:
+				# a helpful new fringe list to avoid errors
+				# when iterate through self.fringe
+				current_fringe = self.fringe
+				for node in current_fringe:
+					self.current_node = node
+					# update the current feature list for this branch
+					tmpNode = node
+					current_feature_list = copy.deepcopy(self.feature_list)
+					while tmpNode.parent != None:
+						current_feature_list.remove(tmpNode.name)
+						tmpNode = tmpNode.parent
+					# split the current feature by values and
+					# create independent dataframes
+					data_split = self.data.groupby(self.current_node.name)				
+					splitted_data_frames = [data_split.get_group(value) for value in data_split.groups]
+					# node has been splitted. removed from the fringe
+					self.fringe.remove(self.current_node)
+					for data_frame in splitted_data_frames:
+						new_node = Node(name=self.choose_the_best_feature(data_frame, current_feature_list), parent=self.current_node, value_direction=data_frame[self.current_node.name].values[0])
+						self.current_node.chidren_list.append(new_node)
+						if new_node.name == None:
+							# data set under the current value of
+							# the splitted feature is pure, no more splitting
+							# new_node becomes a leaf node
+							new_node.is_leaf = True
+							new_node.leaf_target = data_frame[self.target_attribute].values[0]
+						else:
+							# add the node to the fringe
+							self.fringe.append(new_node)
+				self.build_tree()	
 
 
 
 	# Return the next attribute to split based on
 	# the information gain calculation
-	def choose_the_best_feature(self, data_with_targets):
+	def choose_the_best_feature(self, data_with_targets, current_feature_list):
 		''' calculate the E(S) of the current (splitted) dataframe '''
 		self.current_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
 		''' data is pure, no need to split the current node'''
@@ -89,9 +108,9 @@ class Tree:
 		''' get the max value tuple based on the first tuple
 		    value(information gain) in a list of tuples, then get
 		    the feature name associated with this value '''
-		return max([(information_gain(feature), feature) for feature in self.feature_list], key = lambda feature: feature[0])[1]
+		return max([(self.information_gain(feature), feature) for feature in current_feature_list], key = lambda feature: feature[0])[1]
 
-	def calculate_entropy(target_list):
+	def calculate_entropy(self, target_list):
 		# count the target values by value
 		cnt = Counter(target for target in target_list)
 		num_of_instances = len(target_list)
@@ -122,7 +141,17 @@ class Tree:
 		# old_entropy = self.calculate_entropy(self.data[self.target_attribute])
 		return (self.current_entropy - entropy_of_the_feature)
 
-	def print_decision_tree():
-		# start from the root using pre-order traversal
-		# to print out the decision tree
-		pass
+	''' Print the decision tree. When printing the whole decision tree using preorder, must pass in its root'''
+	def print_decision_tree(self, node, current_depth=0): 
+		# start from the root using pre-order 
+		# traversal to print out the decision tree
+		print("{0}{1} = {2} : ".format(current_depth * '| ', node.name, node.value_direction), end='')
+		if node.is_leaf == True:
+			print(node.leaf_target)
+		else:
+			for child in node.chidren_list:
+				self.print_decision_tree(child, current_depth+1)
+
+
+tree = Tree()
+tree.print_decision_tree(tree.root)
