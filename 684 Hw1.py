@@ -21,7 +21,9 @@ class Node:
 		self.name = name
 		self.parent = parent
 		self.chidren_list = None
-		self.value_list = None
+		self.value_direction = None
+		self.is_leaf = False
+		self.leaf_target = None # only assign value when is_leaf is True
 
 class Tree:
 
@@ -32,6 +34,8 @@ class Tree:
 		self.feature_list = training_data_column_values.remove(self.target_attribute)
 		self.current_node = None
 		self.current_entropy = None
+		self.fringe = [] # Keep track of the nodes to be splitted
+
 		# call build_tree to start building the tree
 		self.build_tree()
 	
@@ -43,20 +47,34 @@ class Tree:
 		else:
 			# determine if the root exists
 			if self.current_node == None:
-				root_name = self.choose_the_best_feature()
-				self.root = Node(name = root_name)
+				self.root = Node()
 				self.current_node = self.root
-				self.feature_list.remove(root_name)
-				build_tree()
+				self.root.name = self.choose_the_best_feature(self.data)
+				# special case: when the whole data set is already pure
+				if self.root.name == None:
+					self.root.is_leaf = True
+					self.root.leaf_target = self.data[self.target_attribute][0]
+					return
+				else:
+					# start to recursively build the tree
+					self.feature_list.remove(self.root.name)
+					self.build_tree()
 			else:
-				@TODO
-				''' Stop splitting the node if pure'''
-
 				# split the current feature by values and
 				# create independent dataframes
 				data_split = self.data.groupby(self.current_node.name)
 				splitted_data_frames = [data_split.get_group(value) for value in data_split.groups]
 				for data_frame in splitted_data_frames:
+					new_node = Node(name=self.choose_the_best_feature(data_frame), parent=self.current_node)
+					if new_node.name == None:
+						# data set under the current value of
+						# the splitted feature is pure, no more splitting
+						# new_node becomes a leaf node
+						new_node.is_leaf = True
+						new_node.leaf_target = data_frame[self.target_attribute][0]
+					else:
+						
+					
 
 
 
@@ -65,6 +83,9 @@ class Tree:
 	def choose_the_best_feature(self, data_with_targets):
 		''' calculate the E(S) of the current (splitted) dataframe '''
 		self.current_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
+		''' data is pure, no need to split the current node'''
+		if self.current_entropy == 0:
+			return None
 		''' get the max value tuple based on the first tuple
 		    value(information gain) in a list of tuples, then get
 		    the feature name associated with this value '''
