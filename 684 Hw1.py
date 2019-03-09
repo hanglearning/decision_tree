@@ -18,19 +18,19 @@ training_data_column_values = list(training_data.columns.values)
 
 class Node:
 
-	def __init__(self, name=None, parent=None, value_direction=None):
+	def __init__(self, name=None, parent=None, value_direction=None, data_frame=None):
 		self.name = name
 		self.parent = parent #
-		self.chidren_list = []
+		self.children_list = []
 		self.value_direction = value_direction
-		self.is_leaf = False # redundant, since can be verified if self.name==None. but a good practice to have
+		self.is_leaf = False # redundant, since can be verified if self.name==None. but a good practice to have for efficiency
 		self.leaf_target = None # only assign value when is_leaf is True
+		self.data_frame = data_frame # temp variable to store the dataframe to be splitted from this node, should be cleared to save memory after the tree is built
 
 class Tree:
 
 	def __init__(self):
 		self.root = None
-		self.data = training_data
 		self.target_attribute = training_data_column_values[-1]
 		self.feature_list = training_data_column_values[:-1]
 		self.current_node = None
@@ -46,15 +46,16 @@ class Tree:
 		if self.current_node == None:
 			self.root = Node()
 			self.current_node = self.root
-			self.root.name = self.choose_the_best_feature(self.data, self.feature_list)
+			self.root.name = self.choose_the_best_feature(training_data, self.feature_list)
 			# special case: when the whole data set is already pure
 			if self.root.name == None:
 				self.root.is_leaf = True
-				self.root.leaf_target = self.data[self.target_attribute][0]
+				self.root.leaf_target = training_data[self.target_attribute][0]
 				return
 			else:
+				self.current_node.data_frame = training_data
 				self.feature_list.remove(self.root.name)
-				# put the node to the frienge ready to split
+				# put the node to the fringe ready to split
 				self.fringe.append(self.current_node)
 				# start to recursively build the tree
 				self.build_tree()
@@ -66,8 +67,10 @@ class Tree:
 			else:
 				# a helpful new fringe list to avoid errors
 				# when iterate through self.fringe
-				current_fringe = self.fringe
-				for node in current_fringe:
+				current_fringe = copy.copy(self.fringe)
+				# why for node in current_fringe, it always skips the first element
+				for node_iterator in range(len(current_fringe)): 
+					node = current_fringe[node_iterator]
 					self.current_node = node
 					# update the current feature list for this branch
 					tmpNode = node
@@ -77,13 +80,13 @@ class Tree:
 						tmpNode = tmpNode.parent
 					# split the current feature by values and
 					# create independent dataframes
-					data_split = self.data.groupby(self.current_node.name)				
+					data_split = self.current_node.data_frame.groupby(self.current_node.name)				
 					splitted_data_frames = [data_split.get_group(value) for value in data_split.groups]
 					# node has been splitted. removed from the fringe
 					self.fringe.remove(self.current_node)
 					for data_frame in splitted_data_frames:
-						new_node = Node(name=self.choose_the_best_feature(data_frame, current_feature_list), parent=self.current_node, value_direction=data_frame[self.current_node.name].values[0])
-						self.current_node.chidren_list.append(new_node)
+						new_node = Node(name=self.choose_the_best_feature(data_frame, current_feature_list), parent=self.current_node, value_direction=data_frame[self.current_node.name].values[0], data_frame=data_frame)
+						self.current_node.children_list.append(new_node)
 						if new_node.name == None:
 							# data set under the current value of
 							# the splitted feature is pure, no more splitting
@@ -108,7 +111,7 @@ class Tree:
 		''' get the max value tuple based on the first tuple
 		    value(information gain) in a list of tuples, then get
 		    the feature name associated with this value '''
-		return max([(self.information_gain(feature), feature) for feature in current_feature_list], key = lambda feature: feature[0])[1]
+		return max([(self.information_gain(feature, data_with_targets), feature) for feature in current_feature_list], key = lambda feature: feature[0])[1]
 
 	def calculate_entropy(self, target_list):
 		# count the target values by value
@@ -123,33 +126,35 @@ class Tree:
 
 	# def calculate_variance_impurity(self):
 	# 	pass
-
-	def information_gain(self, feature_to_split):
+	# @TODO self.data change
+	def information_gain(self, feature_to_split, data_with_targets):
 		# split the data into groups of values by an attribute
-		data_split = self.data.groupby(feature_to_split)
+		data_split = data_with_targets.groupby(feature_to_split)
 		'''calculate the entropy of this atrribute
 		   First - use calculate_entropy() for each group of data to
 		   get its entropy, then an anonymous lambda function is 
 		   used to get the ratio for each group.
 		   data_aggregate is the dataFrame storing these values.
 		   ''' 
-		data_aggregate = data_split.agg({self.target_attribute : [self.calculate_entropy, lambda group: len(group)/len(self.data)] })[self.target_attribute]
+		data_aggregate = data_split.agg({self.target_attribute : [self.calculate_entropy, lambda group: len(group)/len(data_with_targets)] })[self.target_attribute]
 		data_aggregate.columns = ['Entropy', 'Ratios']
 		'''Second - an weighted sum of the product of the entropy 
 		   and the value of each value is the entropy of this feature'''
 		entropy_of_the_feature = sum(data_aggregate['Entropy'] * data_aggregate['Ratios'])
-		# old_entropy = self.calculate_entropy(self.data[self.target_attribute])
+		# old_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
 		return (self.current_entropy - entropy_of_the_feature)
 
 	''' Print the decision tree. When printing the whole decision tree using preorder, must pass in its root'''
-	def print_decision_tree(self, node, current_depth=0): 
+	def print_decision_tree(self, node, current_depth=0):
+		decision_direction = node.children_list
+
 		# start from the root using pre-order 
 		# traversal to print out the decision tree
 		print("{0}{1} = {2} : ".format(current_depth * '| ', node.name, node.value_direction), end='')
 		if node.is_leaf == True:
 			print(node.leaf_target)
 		else:
-			for child in node.chidren_list:
+			for child in node.children_list:
 				self.print_decision_tree(child, current_depth+1)
 
 
