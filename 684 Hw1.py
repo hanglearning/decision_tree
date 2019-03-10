@@ -13,32 +13,47 @@ import random
 # validation_set_path = sys.argv[4]
 # test_set_path = sys.argv[5]
 # to_print = sys.argv[6]
-
+L = 5
+K = 5
 # read in the training data
-training_data = pd.read_csv('/Users/chenhang91/Downloads/data_sets1/training_set.csv',delimiter=',')
-training_data_column_values = list(training_data.columns.values)
+training_set = pd.read_csv('/Users/chenhang91/Downloads/data_sets1/training_set.csv',delimiter=',')
+training_set_column_values = list(training_set.columns.values)
+target_attribute = training_set_column_values[-1]
 
+validation_set = pd.read_csv('/Users/chenhang91/Downloads/data_sets1/validation_set.csv',delimiter=',')
 class Node:
 
-	def __init__(self, name=None, parent=None, value_direction=None, data_frame=None):
+	def __init__(self, name=None, parent=None, value_direction=None, data_frame=None, node_depth=0, node_sequence=1):
 		self.name = name
 		self.parent = parent #
 		self.children_list = []
 		self.value_direction = value_direction
-		self.is_leaf = False # redundant, since can be verified if self.name==None. but a good practice to have for efficiency
-		self.leaf_target = None # only assign value when is_leaf is True
-		self.data_frame = data_frame # temp variable to store the dataframe to be splitted from this node, should be cleared to save memory after the tree is built
+		# redundant, since can be verified if self.name==None. but a good practice to have for efficiency
+		self.is_leaf = False
+		# only assign value when is_leaf is True
+		self.leaf_target = None
+		# temp variable to store the dataframe to be splitted from this node, also used for post-pruning
+		self.data_frame = data_frame
+		# helper attribute when printing out the tree
+		self.node_depth = node_depth
 
 class Tree:
 
 	def __init__(self):
 		self.root = None
-		self.target_attribute = training_data_column_values[-1]
-		self.feature_list = training_data_column_values[:-1]
+		self.feature_list = training_set_column_values[:-1]
 		self.current_node = None
-		self.current_entropy = None # used for IG tree
-		self.current_variance_impurity = None # used for VI tree
-		self.fringe = [] # Keep track of the leaves and nodes to be splitted
+		# used for IG tree
+		self.current_entropy = None
+		# used for VI tree
+		self.current_variance_impurity = None 
+		# Keep track of the leaves and nodes to be splitted
+		self.fringe = [] 
+		# helper attributes for print_decision_tree
+		self.max_print_depth = 0 
+		self.tree_print_output = ''
+		# keep track of the non-leaf nodes used for post-pruning
+		self.non_leaf_nodes = []
 	
 	def build_tree(self, heuristic): 
 		'''heuristic equals to either ig(information gain) or vi(variance impurity)'''
@@ -48,17 +63,18 @@ class Tree:
 			self.current_node = self.root
 			if heuristic == "ig":
 				# if building the tree with information gain heuristic
-				self.root.name = self.choose_the_best_feature_by_information_gain(training_data, self.feature_list)
+				self.root.name = self.choose_the_best_feature_by_information_gain(training_set, self.feature_list)
 			else:
 				# if building the tree with impurity gain heuristic
-				self.root.name = self.choose_the_best_feature_by_variance_impurity(training_data, self.feature_list)
+				self.root.name = self.choose_the_best_feature_by_variance_impurity(training_set, self.feature_list)
 			# special case: when the whole data set is already pure
 			if self.root.name == None:
 				self.root.is_leaf = True
-				self.root.leaf_target = training_data[self.target_attribute][0]
+				self.root.leaf_target = training_set[target_attribute][0]
 				return
 			else:
-				self.current_node.data_frame = training_data
+				self.non_leaf_nodes.append(self.current_node)
+				self.current_node.data_frame = training_set
 				self.feature_list.remove(self.root.name)
 				# put the node to the fringe ready to split
 				self.fringe.append(self.current_node)
@@ -96,7 +112,8 @@ class Tree:
 							node_name = self.choose_the_best_feature_by_information_gain(data_frame, current_feature_list)
 						else:
 							node_name = self.choose_the_best_feature_by_variance_impurity(data_frame, current_feature_list)
-						new_node = Node(name=node_name, parent=self.current_node, value_direction=data_frame[self.current_node.name].values[0], data_frame=data_frame)
+						# construct the new node
+						new_node = Node(name=node_name, parent=self.current_node, value_direction=data_frame[self.current_node.name].values[0], data_frame=data_frame, node_depth=len(self.feature_list) - len(current_feature_list) + 1)
 						self.current_node.children_list.append(new_node)
 						if new_node.name == None:
 							# data set under the current value of
@@ -105,15 +122,16 @@ class Tree:
 							new_node.is_leaf = True
 							if len(current_feature_list) == 0:
 								# if all the features are used but data is still not pure, assigned to the value that appear the most in the class value
-								most_target_values = data_frame[self.target_attribute].mode()
-								# if there are more than one value that appears the most, we make a random guess
+								most_target_values = data_frame[target_attribute].mode()
+								# if there are more than one value that appears the most, we make a random selection
 								new_node.leaf_target = most_target_values[random.randint(0,len(most_target_values)-1)]
 							else:
 								# data pure, value will be assigned to the class value
-								new_node.leaf_target = data_frame[self.target_attribute].values[0]
+								new_node.leaf_target = data_frame[target_attribute].values[0]
 							# still add to the fringe used to check if the tree building process has to be stopped
 							self.fringe.append(new_node)
 						else:
+							self.non_leaf_nodes.append(new_node)
 							# just add the node to the fringe
 							self.fringe.append(new_node)
 				self.build_tree(heuristic)	
@@ -124,7 +142,7 @@ class Tree:
 	# the information gain heuristic calculation
 	def choose_the_best_feature_by_information_gain(self, data_with_targets, current_feature_list):
 		''' calculate the E(S) of the current (splitted) dataframe '''
-		self.current_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
+		self.current_entropy = self.calculate_entropy(data_with_targets[target_attribute])
 		''' data is pure, no need to split the current node'''
 		if self.current_entropy == 0 or len(current_feature_list) == 0:
 			return None
@@ -150,16 +168,16 @@ class Tree:
 		   First - use calculate_entropy() for each group of data to get its entropy, then an anonymous lambda function is used to get the ratio for each group.
 		   data_aggregate is the dataFrame storing these values.
 		   ''' 
-		data_aggregate = data_split.agg({self.target_attribute : [self.calculate_entropy, lambda group: len(group)/len(data_with_targets)] })[self.target_attribute]
+		data_aggregate = data_split.agg({target_attribute : [self.calculate_entropy, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
 		data_aggregate.columns = ['Entropy', 'Ratios']
 		'''Second - an weighted sum of the product of the entropy and the value of each value is the entropy of this feature'''
 		entropy_of_the_feature = sum(data_aggregate['Entropy'] * data_aggregate['Ratios'])
-		# old_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
+		# old_entropy = self.calculate_entropy(data_with_targets[target_attribute])
 		return (self.current_entropy - entropy_of_the_feature)
 
 	def choose_the_best_feature_by_variance_impurity(self, data_with_targets, current_feature_list):
 		''' calculate the VI(S) of the current (splitted) dataframe '''
-		self.current_variance_impurity = self.calculate_variance_impurity(data_with_targets[self.target_attribute])
+		self.current_variance_impurity = self.calculate_variance_impurity(data_with_targets[target_attribute])
 		''' data is pure, no need to split the current node'''
 		if self.current_variance_impurity == 0 or len(current_feature_list) == 0:
 			return None
@@ -182,10 +200,10 @@ class Tree:
 		# split the data into groups of values by an attribute
 		data_split = data_with_targets.groupby(feature_to_split)
 		'''calculate the variance impurity of this atrribute. The process is similar to calculate its information gain''' 
-		data_aggregate = data_split.agg({self.target_attribute : [self.calculate_variance_impurity, lambda group: len(group)/len(data_with_targets)] })[self.target_attribute]
+		data_aggregate = data_split.agg({target_attribute : [self.calculate_variance_impurity, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
 		data_aggregate.columns = ['Variance Impurity', 'Ratios']
 		variance_impurity_of_the_feature = sum(data_aggregate['Variance Impurity'] * data_aggregate['Ratios'])
-		# old_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
+		# old_entropy = self.calculate_entropy(data_with_targets[target_attribute])
 		return (self.current_variance_impurity - variance_impurity_of_the_feature)
 
 	# a helper function used to check if the nodes in the fringe
@@ -196,39 +214,122 @@ class Tree:
 				return False
 		return True
 
-
 	''' Print the decision tree. When printing the whole decision tree using preorder, must pass in its root'''
-	def print_decision_tree(self, node, current_depth=0, is_right_most_leaf=False, max_depth=0):
-		max_depth = max(max_depth, current_depth)
+	def print_decision_tree(self):
+		self.construct_decision_tree_output(self.root)
+		for line in self.tree_print_output.splitlines():
+			if len(line[-2:]) > 0 and line[-2:][0] == '=':
+				continue
+			else:
+				print(line)
+		# print("".join([s for s in self.tree_print_output.strip().splitlines(True) if s.strip("\r\n").strip()]))
+		
+
+	''' core function for print_decision_tree.  print_decision_tree is needed to strip out the redundant leaf lines due to the difficulties of removing them in construct_decision_tree_output()'''
+	def construct_decision_tree_output(self, node, is_right_most_leaf=False):
+		self.max_print_depth = max(self.max_print_depth, node.node_depth)
 		# start from the root using pre-order 
 		# traversal to print out the decision tree
 		if node.is_leaf == True:
-			print(node.leaf_target)
+			self.tree_print_output += str(node.leaf_target)
 			if is_right_most_leaf == False:
-				print("{0}{1} = ".format((current_depth-1) * '| ', node.parent.name), end='')
+				self.tree_print_output += ("\n{0}{1} = ".format((node.node_depth-1) * '| ', node.parent.name))
 			else:
 				pass
 			return
 		else:
-			print("\n{0}{1} = ".format(current_depth * '| ', node.name), end='')
+			self.tree_print_output += ("\n{0}{1} = ".format(node.node_depth * '| ', node.name))
 			for child_iter in range(len(node.children_list)):
 				child = node.children_list[child_iter]
 				if child_iter == len(node.children_list) - 1:
-					if child.name == "XH":
-						print("",end="")
-					if current_depth <= max_depth:
-						print("\n{0}{1} = ".format(current_depth * '| ', node.name), end='')
-					print("{0} : ".format(child.value_direction), end='')
-					self.print_decision_tree(child, current_depth+1, is_right_most_leaf=True, max_depth=max_depth)
+					if child.node_depth < self.max_print_depth:
+						self.tree_print_output += ("\n{0}{1} = ".format(node.node_depth * '| ', node.name))
+					self.tree_print_output += ("{0} : ".format(child.value_direction))
+					self.construct_decision_tree_output(child, is_right_most_leaf=True)
 				else:	
-					print("{0} : ".format(child.value_direction), end='')
-					self.print_decision_tree(child, current_depth+1, is_right_most_leaf=False, max_depth=max_depth)
+					self.tree_print_output += ("{0} : ".format(child.value_direction))
+					self.construct_decision_tree_output(child, is_right_most_leaf=False)
 
+	def evaluate_accuracy(self, data_set):
+		tmpNode = self.root
+		num_of_instances = len(data_set)
+		correctly_classified = 0
+		for index, row in data_set.iterrows():
+			while tmpNode.is_leaf != True:
+				search_attr_name = tmpNode.name
+				search_direction = row[search_attr_name]
+				for node in tmpNode.children_list:
+					if node.value_direction == search_direction:
+						tmpNode = node
+			prediction = tmpNode.leaf_target
+			if prediction == row[target_attribute]:
+				correctly_classified += 1
+			tmpNode = self.root
+		return correctly_classified/num_of_instances
 
-tree_ig = Tree()
-tree_ig.build_tree("ig")
-tree_ig.print_decision_tree(tree_ig.root)
+# helper function for post_pruning_decision_tree to prune children and sub-children nodes under one node 
+def prune_all_non_leaf_nodes_under_one_node(tree, node):
+	for child in node.children_list:
+		if child.is_leaf != True:
+			tree.non_leaf_nodes.remove(child)
+			prune_all_non_leaf_nodes_under_one_node(tree, child)
 
-# tree_vi = Tree()
-# tree_vi.build_tree("vi")
-# tree_vi.print_decision_tree(tree_vi.root)
+def post_pruning_decision_tree(decision_tree):
+	the_best_tree = copy.deepcopy(decision_tree)
+	the_best_tree_accuracy = the_best_tree.evaluate_accuracy(validation_set)
+	for i in range(L):
+		tmpTree = copy.deepcopy(decision_tree)
+		M = random.randint(1, K)
+		for j in range(M):
+			N = len(tmpTree.non_leaf_nodes)
+			if N == 0:
+				# the root of this tree is a leaf node
+				# no need to prune
+				break
+			else:
+				P = random.randint(1, N)
+				tmp_leaf_node = tmpTree.non_leaf_nodes[P - 1]
+				# make this node leaf node
+				tmp_leaf_node.is_leaf = True
+				# pruning all its children and sub-children nodes
+				#TODO prune all chilren
+				prune_all_non_leaf_nodes_under_one_node(tmpTree, tmp_leaf_node)
+				# for child in tmp_leaf_node.children_list:
+				# 	tmp_child = child
+				# 	while tmp_child.is_leaf != True:
+				# 		tmpTree.non_leaf_nodes.remove(tmp_child)
+				#empty the children list whatsoever
+				tmp_leaf_node.children_list.clear()
+				# remove itself from the non_leaf_nodes
+				tmpTree.non_leaf_nodes.remove(tmp_leaf_node)
+				# assign the target_value to the majority of its class
+				most_target_values = tmp_leaf_node.data_frame[target_attribute].mode()
+				# if there are more than one value that appears the most, we make a random selection
+				tmp_leaf_node.leaf_target = most_target_values[random.randint(0,len(most_target_values)-1)]
+		# evaluate the accuracy of this tree
+		tmpTree_accuracy = tmpTree.evaluate_accuracy(validation_set)
+		if tmpTree_accuracy > the_best_tree_accuracy:
+			the_best_tree = copy.deepcopy(tmpTree)
+	return the_best_tree
+
+# tree_ig = Tree()
+# tree_ig.build_tree("ig")
+# tree_ig.print_decision_tree()
+# print("Tree accuracy on training data:", tree_ig.evaluate_accuracy(training_set))
+# print("Before pruning, tree accuracy:", tree_ig.evaluate_accuracy(validation_set))
+
+# tree_ig_best = post_pruning_decision_tree(tree_ig)
+# tree_ig_best.print_decision_tree()
+# tree_ig_best_accuracy = tree_ig_best.evaluate_accuracy(validation_set)
+# print("After pruning, tree accuracy:", tree_ig_best_accuracy)
+
+tree_vi = Tree()
+tree_vi.build_tree("vi")
+# tree_vi.print_decision_tree()
+print("Tree accuracy on training data:", tree_vi.evaluate_accuracy(training_set))
+print("Before pruning, tree accuracy:", tree_vi.evaluate_accuracy(validation_set))
+
+tree_vi_best = post_pruning_decision_tree(tree_vi)
+# tree_vi_best.print_decision_tree()
+tree_vi_best_accuracy = tree_vi_best.evaluate_accuracy(validation_set)
+print("After pruning, tree accuracy:", tree_vi_best_accuracy)
