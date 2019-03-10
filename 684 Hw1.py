@@ -3,6 +3,8 @@ import sys
 from collections import Counter
 import math
 import copy
+import random
+
 
 # Input parameters
 # L = int(sys.argv[1])
@@ -36,7 +38,7 @@ class Tree:
 		self.current_node = None
 		self.current_entropy = None # used for IG tree
 		self.current_variance_impurity = None # used for VI tree
-		self.fringe = [] # Keep track of the nodes to be splitted
+		self.fringe = [] # Keep track of the leaves and nodes to be splitted
 	
 	def build_tree(self, heuristic): 
 		'''heuristic equals to either ig(information gain) or vi(variance impurity)'''
@@ -63,16 +65,19 @@ class Tree:
 				# start to recursively build the tree
 				self.build_tree(heuristic)
 		else:
-			''' stop building the tree if all the features necessary to be splitted are all splitted (either a pure data set is found under the branch(the leaf node is found in this branch) or this branch has used up all the features in the list. This is tracked by self.fringe)'''
-			if len(self.fringe) == 0:
+			'''Stop building the tree if all the features necessary to be splitted are all splitted (either a pure data set is found under the branch(the leaf node is found in this branch) or this branch has used up all the features in the list. This is tracked by self.fringe). In this situation the nodes in the fringe should be all leaves.'''
+			if self.check_if_fringe_has_all_leaves() == True:
 				return
 			else:
 				# a helpful new fringe list to avoid errors
 				# when iterate through self.fringe
 				current_fringe = copy.copy(self.fringe)
 				# why for node in current_fringe, it always skips the first element
-				for node_iterator in range(len(current_fringe)): 
-					node = current_fringe[node_iterator]
+				for node in current_fringe:
+					if node.is_leaf == False: 
+						pass
+					else:
+						continue
 					self.current_node = node
 					# update the current feature list for this branch
 					tmpNode = node
@@ -98,9 +103,18 @@ class Tree:
 							# the splitted feature is pure, no more 
 							# splitting new_node becomes a leaf node
 							new_node.is_leaf = True
-							new_node.leaf_target = data_frame[self.target_attribute].values[0]
+							if len(current_feature_list) == 0:
+								# if all the features are used but data is still not pure, assigned to the value that appear the most in the class value
+								most_target_values = data_frame[self.target_attribute].mode()
+								# if there are more than one value that appears the most, we make a random guess
+								new_node.leaf_target = most_target_values[random.randint(0,len(most_target_values)-1)]
+							else:
+								# data pure, value will be assigned to the class value
+								new_node.leaf_target = data_frame[self.target_attribute].values[0]
+							# still add to the fringe used to check if the tree building process has to be stopped
+							self.fringe.append(new_node)
 						else:
-							# add the node to the fringe
+							# just add the node to the fringe
 							self.fringe.append(new_node)
 				self.build_tree(heuristic)	
 
@@ -112,11 +126,11 @@ class Tree:
 		''' calculate the E(S) of the current (splitted) dataframe '''
 		self.current_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
 		''' data is pure, no need to split the current node'''
-		if self.current_entropy == 0:
+		if self.current_entropy == 0 or len(current_feature_list) == 0:
 			return None
 		''' get the max value tuple based on the first tuple
 		    value(information gain) in a list of tuples, then get the feature name associated with this value '''
-		return max([(self.information_gain(feature, data_with_targets), feature) for feature in current_feature_list], key = lambda feature: feature[0])[1]
+		return max([(self.information_gain(feature, data_with_targets), feature) for feature in current_feature_list], key = lambda feature_tuple: feature_tuple[0])[1]
 
 	def calculate_entropy(self, target_list):
 		# count the target values by value
@@ -147,7 +161,7 @@ class Tree:
 		''' calculate the VI(S) of the current (splitted) dataframe '''
 		self.current_variance_impurity = self.calculate_variance_impurity(data_with_targets[self.target_attribute])
 		''' data is pure, no need to split the current node'''
-		if self.current_variance_impurity == 0:
+		if self.current_variance_impurity == 0 or len(current_feature_list) == 0:
 			return None
 		''' get the max value tuple based on the first tuple
 		    value(impurity gain) in a list of tuples, then get the feature name associated with this value '''
@@ -174,28 +188,47 @@ class Tree:
 		# old_entropy = self.calculate_entropy(data_with_targets[self.target_attribute])
 		return (self.current_variance_impurity - variance_impurity_of_the_feature)
 
+	# a helper function used to check if the nodes in the fringe
+	# are all leaves. If all leaves, stop building the tree
+	def check_if_fringe_has_all_leaves(self):
+		for node in self.fringe:
+			if node.is_leaf == False:
+				return False
+		return True
+
 
 	''' Print the decision tree. When printing the whole decision tree using preorder, must pass in its root'''
-	def print_decision_tree(self, node, current_depth=0):
+	def print_decision_tree(self, node, current_depth=0, is_right_most_leaf=False, max_depth=0):
+		max_depth = max(max_depth, current_depth)
 		# start from the root using pre-order 
 		# traversal to print out the decision tree
-		if node.name==None:
-			print('',end='')
 		if node.is_leaf == True:
 			print(node.leaf_target)
-			print("{0}{1} = ".format((current_depth-1) * '| ', node.parent.name), end='')
+			if is_right_most_leaf == False:
+				print("{0}{1} = ".format((current_depth-1) * '| ', node.parent.name), end='')
+			else:
+				pass
 			return
 		else:
 			print("\n{0}{1} = ".format(current_depth * '| ', node.name), end='')
-			for child in node.children_list:
-				print("{0} : ".format(child.value_direction), end='')
-				self.print_decision_tree(child, current_depth+1)
+			for child_iter in range(len(node.children_list)):
+				child = node.children_list[child_iter]
+				if child_iter == len(node.children_list) - 1:
+					if child.name == "XH":
+						print("",end="")
+					if current_depth <= max_depth:
+						print("\n{0}{1} = ".format(current_depth * '| ', node.name), end='')
+					print("{0} : ".format(child.value_direction), end='')
+					self.print_decision_tree(child, current_depth+1, is_right_most_leaf=True, max_depth=max_depth)
+				else:	
+					print("{0} : ".format(child.value_direction), end='')
+					self.print_decision_tree(child, current_depth+1, is_right_most_leaf=False, max_depth=max_depth)
 
 
-# tree_ig = Tree()
-# tree_ig.build_tree("ig")
-# tree_ig.print_decision_tree(tree_ig.root)
+tree_ig = Tree()
+tree_ig.build_tree("ig")
+tree_ig.print_decision_tree(tree_ig.root)
 
-tree_vi = Tree()
-tree_vi.build_tree("vi")
-tree_vi.print_decision_tree(tree_vi.root)
+# tree_vi = Tree()
+# tree_vi.build_tree("vi")
+# tree_vi.print_decision_tree(tree_vi.root)
