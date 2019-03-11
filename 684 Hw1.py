@@ -216,6 +216,7 @@ class Tree:
 
 	''' Print the decision tree. When printing the whole decision tree using preorder, must pass in its root'''
 	def print_decision_tree(self, heuristic):
+		whether_print = 'y'
 		tree_print_length = len(self.non_leaf_nodes)
 		if tree_print_length > 300:
 			whether_print = input("This tree may be extremely long.\nIt has {0} nodes which means {1} lines of output.\nPlease decide whether continue to print.(y/n)".format(tree_print_length, tree_print_length * 2))
@@ -333,7 +334,7 @@ def post_pruning_decision_tree(decision_tree):
 
 ''' Information Gain'''
 print("Information Gain")
-print("Build the tree using the training data by information gain...")
+print("Building the tree using the training data by information gain...")
 tree_ig = Tree()
 tree_ig.build_tree("ig")
 print()
@@ -346,13 +347,14 @@ print()
 if to_print == "yes":
 	print("Printing out the original tree")
 	tree_ig.print_decision_tree("ig")
+	print()
 	print("Printing out the post pruned tree")
 	tree_ig_best.print_decision_tree("ig")
-
+	print()
 
 ''' Variance Impurity '''
 print("Variance Impurity")
-print("Build the tree using the training data by variance impurity...")
+print("Building the tree using the training data by variance impurity...")
 tree_vi = Tree()
 tree_vi.build_tree("vi")
 print()
@@ -365,5 +367,6 @@ print()
 if to_print == "yes":
 	print("Printing out the original tree")
 	tree_vi.print_decision_tree("vi")
+	print()
 	print("Printing out the post pruned tree")
 	tree_vi_best.print_decision_tree("vi")
