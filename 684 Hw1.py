@@ -7,20 +7,21 @@ import random
 
 
 # Input parameters
-# L = int(sys.argv[1])
-# K = int(sys.argv[2])
-# training_set_path = sys.argv[3]
-# validation_set_path = sys.argv[4]
-# test_set_path = sys.argv[5]
-# to_print = sys.argv[6]
-L = 5
-K = 5
+L = int(sys.argv[1])
+K = int(sys.argv[2])
+training_set_path = sys.argv[3]
+validation_set_path = sys.argv[4]
+test_set_path = sys.argv[5]
+to_print = sys.argv[6]
+
 # read in the training data
-training_set = pd.read_csv('/Users/chenhang91/Downloads/data_sets1/training_set.csv',delimiter=',')
+training_set = pd.read_csv(training_set_path ,delimiter=',')
 training_set_column_values = list(training_set.columns.values)
 target_attribute = training_set_column_values[-1]
 
-validation_set = pd.read_csv('/Users/chenhang91/Downloads/data_sets1/validation_set.csv',delimiter=',')
+validation_set = pd.read_csv(validation_set_path ,delimiter=',')
+test_set = pd.read_csv(test_set_path ,delimiter=',')
+
 class Node:
 
 	def __init__(self, name=None, parent=None, value_direction=None, data_frame=None, node_depth=0, node_sequence=1):
@@ -172,7 +173,6 @@ class Tree:
 		data_aggregate.columns = ['Entropy', 'Ratios']
 		'''Second - an weighted sum of the product of the entropy and the value of each value is the entropy of this feature'''
 		entropy_of_the_feature = sum(data_aggregate['Entropy'] * data_aggregate['Ratios'])
-		# old_entropy = self.calculate_entropy(data_with_targets[target_attribute])
 		return (self.current_entropy - entropy_of_the_feature)
 
 	def choose_the_best_feature_by_variance_impurity(self, data_with_targets, current_feature_list):
@@ -215,14 +215,21 @@ class Tree:
 		return True
 
 	''' Print the decision tree. When printing the whole decision tree using preorder, must pass in its root'''
-	def print_decision_tree(self):
-		self.construct_decision_tree_output(self.root)
-		for line in self.tree_print_output.splitlines():
-			if len(line[-2:]) > 0 and line[-2:][0] == '=':
-				continue
-			else:
-				print(line)
-		# print("".join([s for s in self.tree_print_output.strip().splitlines(True) if s.strip("\r\n").strip()]))
+	def print_decision_tree(self, heuristic):
+		tree_print_length = len(self.non_leaf_nodes)
+		if tree_print_length > 300:
+			whether_print = input("This tree may be extremely long.\nIt has {0} nodes which means {1} lines of output.\nPlease decide whether continue to print.(y/n)".format(tree_print_length, tree_print_length * 2))
+			while whether_print != 'y' and whether_print != 'n':
+				whether_print = input("Please input y/n:")
+		if whether_print == 'y':
+			self.construct_decision_tree_output(self.root)
+			for line in self.tree_print_output.splitlines():
+				if len(line[-2:]) > 0 and line[-2:][0] == '=':
+					continue
+				else:
+					print(line)
+		else:
+			pass
 		
 
 	''' core function for print_decision_tree.  print_decision_tree is needed to strip out the redundant leaf lines due to the difficulties of removing them in construct_decision_tree_output()'''
@@ -255,15 +262,29 @@ class Tree:
 		num_of_instances = len(data_set)
 		correctly_classified = 0
 		for index, row in data_set.iterrows():
+			missing_value = False
 			while tmpNode.is_leaf != True:
 				search_attr_name = tmpNode.name
 				search_direction = row[search_attr_name]
-				for node in tmpNode.children_list:
+				for node_iter in range(len(tmpNode.children_list)):
+					node = tmpNode.children_list[node_iter]
 					if node.value_direction == search_direction:
 						tmpNode = node
-			prediction = tmpNode.leaf_target
-			if prediction == row[target_attribute]:
-				correctly_classified += 1
+						break
+					else:
+						if node_iter == len(tmpNode.children_list) - 1:
+							# we have missing values in the traning_set
+							# we choose to ignore it
+							missing_value = True
+							break
+				if missing_value == True:
+					break
+			if missing_value == False:
+				prediction = tmpNode.leaf_target
+				if prediction == row[target_attribute]:
+					correctly_classified += 1
+			else:
+				pass
 			tmpNode = self.root
 		return correctly_classified/num_of_instances
 
@@ -292,12 +313,7 @@ def post_pruning_decision_tree(decision_tree):
 				# make this node leaf node
 				tmp_leaf_node.is_leaf = True
 				# pruning all its children and sub-children nodes
-				#TODO prune all chilren
 				prune_all_non_leaf_nodes_under_one_node(tmpTree, tmp_leaf_node)
-				# for child in tmp_leaf_node.children_list:
-				# 	tmp_child = child
-				# 	while tmp_child.is_leaf != True:
-				# 		tmpTree.non_leaf_nodes.remove(tmp_child)
 				#empty the children list whatsoever
 				tmp_leaf_node.children_list.clear()
 				# remove itself from the non_leaf_nodes
@@ -312,24 +328,42 @@ def post_pruning_decision_tree(decision_tree):
 			the_best_tree = copy.deepcopy(tmpTree)
 	return the_best_tree
 
-# tree_ig = Tree()
-# tree_ig.build_tree("ig")
-# tree_ig.print_decision_tree()
-# print("Tree accuracy on training data:", tree_ig.evaluate_accuracy(training_set))
-# print("Before pruning, tree accuracy:", tree_ig.evaluate_accuracy(validation_set))
 
-# tree_ig_best = post_pruning_decision_tree(tree_ig)
-# tree_ig_best.print_decision_tree()
-# tree_ig_best_accuracy = tree_ig_best.evaluate_accuracy(validation_set)
-# print("After pruning, tree accuracy:", tree_ig_best_accuracy)
+''' Start the program '''
 
+''' Information Gain'''
+print("Information Gain")
+print("Build the tree using the training data by information gain...")
+tree_ig = Tree()
+tree_ig.build_tree("ig")
+print()
+print("Before pruning, tree accuracy on test data set:", tree_ig.evaluate_accuracy(test_set))
+print("Pruning the tree...")
+tree_ig_best = post_pruning_decision_tree(tree_ig)
+print("After pruning, tree accuracy on test set:", tree_ig_best.evaluate_accuracy(test_set))
+print()
+# print out the tree
+if to_print == "yes":
+	print("Printing out the original tree")
+	tree_ig.print_decision_tree("ig")
+	print("Printing out the post pruned tree")
+	tree_ig_best.print_decision_tree("ig")
+
+
+''' Variance Impurity '''
+print("Variance Impurity")
+print("Build the tree using the training data by variance impurity...")
 tree_vi = Tree()
 tree_vi.build_tree("vi")
-# tree_vi.print_decision_tree()
-print("Tree accuracy on training data:", tree_vi.evaluate_accuracy(training_set))
-print("Before pruning, tree accuracy:", tree_vi.evaluate_accuracy(validation_set))
-
+print()
+print("Before pruning, tree accuracy on test data set:", tree_vi.evaluate_accuracy(test_set))
+print("Pruning the tree...")
 tree_vi_best = post_pruning_decision_tree(tree_vi)
-# tree_vi_best.print_decision_tree()
-tree_vi_best_accuracy = tree_vi_best.evaluate_accuracy(validation_set)
-print("After pruning, tree accuracy:", tree_vi_best_accuracy)
+print("After pruning, tree accuracy on test set:", tree_vi_best.evaluate_accuracy(test_set))
+print()
+# print out the tree
+if to_print == "yes":
+	print("Printing out the original tree")
+	tree_vi.print_decision_tree("vi")
+	print("Printing out the post pruned tree")
+	tree_vi_best.print_decision_tree("vi")
