@@ -44,10 +44,8 @@ class Tree:
 		self.root = None
 		self.feature_list = training_set_column_values[:-1]
 		self.current_node = None
-		# used for IG tree
-		self.current_entropy = None
-		# used for VI tree
-		self.current_variance_impurity = None 
+		# used for both IG or VI trees to keep track of the entropy or variance impurity for the splitting frame
+		self.current_entropy_or_variance_impurity = None 
 		# Keep track of the leaves and nodes to be splitted
 		self.fringe = [] 
 		# helper attributes for print_decision_tree
@@ -62,12 +60,7 @@ class Tree:
 		if self.current_node == None:
 			self.root = Node(value_direction="ALL")
 			self.current_node = self.root
-			if heuristic == "ig":
-				# if building the tree with information gain heuristic
-				self.root.name = self.choose_the_best_feature_by_information_gain(training_set, self.feature_list)
-			else:
-				# if building the tree with impurity gain heuristic
-				self.root.name = self.choose_the_best_feature_by_variance_impurity(training_set, self.feature_list)
+			self.root.name = self.choose_the_best_feature(training_set, self.feature_list, heuristic)
 			# special case: when the whole data set is already pure
 			if self.root.name == None:
 				self.root.is_leaf = True
@@ -109,10 +102,7 @@ class Tree:
 					# node has been splitted. removed from the fringe
 					self.fringe.remove(self.current_node)
 					for data_frame in splitted_data_frames:
-						if heuristic == "ig":
-							node_name = self.choose_the_best_feature_by_information_gain(data_frame, current_feature_list)
-						else:
-							node_name = self.choose_the_best_feature_by_variance_impurity(data_frame, current_feature_list)
+						node_name = self.choose_the_best_feature(data_frame, current_feature_list, heuristic)
 						# construct the new node
 						new_node = Node(name=node_name, parent=self.current_node, value_direction=data_frame[self.current_node.name].values[0], data_frame=data_frame, node_depth=len(self.feature_list) - len(current_feature_list) + 1)
 						self.current_node.children_list.append(new_node)
@@ -137,53 +127,46 @@ class Tree:
 							self.fringe.append(new_node)
 				self.build_tree(heuristic)	
 
+	# Return the next attribute to split based on the information 
+	# of information gain or impurity gain heuristic calculation
+	def choose_the_best_feature(self, data_with_targets, current_feature_list, heuristic):
+			''' calculate the E(S) or VI(S) of the current (splitted) dataframe '''
+			if heuristic == "ig":
+				self.current_entropy_or_variance_impurity = self.calculate_entropy(data_with_targets[target_attribute])
+			else:
+				self.current_entropy_or_variance_impurity = self.calculate_variance_impurity(data_with_targets[target_attribute])
+			''' data is pure, no need to split the current node'''
+			if self.current_entropy_or_variance_impurity == 0 or len(current_feature_list) == 0:
+				return None
+			''' get the max value tuple based on the first tuple
+				value(information or impurity gain) in a list of tuples, then get the feature name associated with this value '''
+			return max([(self.information_or_impurity_gain(feature, data_with_targets, heuristic), feature) for feature in current_feature_list], key = lambda feature_tuple: feature_tuple[0])[1]
 
-
-	# Return the next attribute to split based on
-	# the information gain heuristic calculation
-	def choose_the_best_feature_by_information_gain(self, data_with_targets, current_feature_list):
-		''' calculate the E(S) of the current (splitted) dataframe '''
-		self.current_entropy = self.calculate_entropy(data_with_targets[target_attribute])
-		''' data is pure, no need to split the current node'''
-		if self.current_entropy == 0 or len(current_feature_list) == 0:
-			return None
-		''' get the max value tuple based on the first tuple
-		    value(information gain) in a list of tuples, then get the feature name associated with this value '''
-		return max([(self.information_gain(feature, data_with_targets), feature) for feature in current_feature_list], key = lambda feature_tuple: feature_tuple[0])[1]
+	def information_or_impurity_gain(self, feature_to_split, data_with_targets, heuristic):
+			# split the data into groups of values by an attribute
+			data_split = data_with_targets.groupby(feature_to_split)
+			'''calculate the entropy or variance impurity of this atrribute
+			First - use calculate_entropy() or calculate_variance_impurity() for each group of data to get its entropy or variance impurity, then an anonymous lambda function is used to get the ratio for each group.
+			data_aggregate is the dataFrame storing these values.''' 
+			if heuristic == "ig":
+				data_aggregate = data_split.agg({target_attribute : [self.calculate_entropy, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
+			else:
+				data_aggregate = data_split.agg({target_attribute : [self.calculate_variance_impurity, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
+			# Values are either the entropy or variance impurity
+			data_aggregate.columns = ['Values', 'Ratios']
+			'''Second - an weighted sum of the product of the entropy or variance impurity and the ratio of each value of this feature'''
+			entropy_or_variance_impurity_of_the_feature = sum(data_aggregate['Values'] * data_aggregate['Ratios'])
+			return (self.current_entropy_or_variance_impurity - entropy_or_variance_impurity_of_the_feature)
 
 	def calculate_entropy(self, target_list):
 		# count the target values by value
 		cnt = Counter(target for target in target_list)
 		num_of_instances = len(target_list)
 		ratios = [value / num_of_instances for value in cnt.values()]
-		# calculate entropy
 		entropy = 0
 		for ratio in ratios:
 			entropy += -ratio * math.log(ratio, 2)
 		return entropy
-
-	def information_gain(self, feature_to_split, data_with_targets):
-		# split the data into groups of values by an attribute
-		data_split = data_with_targets.groupby(feature_to_split)
-		'''calculate the entropy of this atrribute
-		   First - use calculate_entropy() for each group of data to get its entropy, then an anonymous lambda function is used to get the ratio for each group.
-		   data_aggregate is the dataFrame storing these values.
-		   ''' 
-		data_aggregate = data_split.agg({target_attribute : [self.calculate_entropy, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
-		data_aggregate.columns = ['Entropy', 'Ratios']
-		'''Second - an weighted sum of the product of the entropy and the value of each value is the entropy of this feature'''
-		entropy_of_the_feature = sum(data_aggregate['Entropy'] * data_aggregate['Ratios'])
-		return (self.current_entropy - entropy_of_the_feature)
-
-	def choose_the_best_feature_by_variance_impurity(self, data_with_targets, current_feature_list):
-		''' calculate the VI(S) of the current (splitted) dataframe '''
-		self.current_variance_impurity = self.calculate_variance_impurity(data_with_targets[target_attribute])
-		''' data is pure, no need to split the current node'''
-		if self.current_variance_impurity == 0 or len(current_feature_list) == 0:
-			return None
-		''' get the max value tuple based on the first tuple
-		    value(impurity gain) in a list of tuples, then get the feature name associated with this value '''
-		return max([(self.impurity_gain(feature, data_with_targets), feature) for feature in current_feature_list], key = lambda feature: feature[0])[1]
 
 	def calculate_variance_impurity(self, target_list):
 		# count the target values by value
@@ -195,16 +178,6 @@ class Tree:
 		for ratio in ratios:
 			variance_impurity *= ratio
 		return variance_impurity
-
-	def impurity_gain(self, feature_to_split, data_with_targets):
-		# split the data into groups of values by an attribute
-		data_split = data_with_targets.groupby(feature_to_split)
-		'''calculate the variance impurity of this atrribute. The process is similar to calculate its information gain''' 
-		data_aggregate = data_split.agg({target_attribute : [self.calculate_variance_impurity, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
-		data_aggregate.columns = ['Variance Impurity', 'Ratios']
-		variance_impurity_of_the_feature = sum(data_aggregate['Variance Impurity'] * data_aggregate['Ratios'])
-		# old_entropy = self.calculate_entropy(data_with_targets[target_attribute])
-		return (self.current_variance_impurity - variance_impurity_of_the_feature)
 
 	# a helper function used to check if the nodes in the fringe
 	# are all leaves. If all leaves, stop building the tree
@@ -327,6 +300,7 @@ def post_pruning_decision_tree(decision_tree):
 		tmpTree_accuracy = tmpTree.evaluate_accuracy(validation_set)
 		if tmpTree_accuracy > the_best_tree_accuracy:
 			the_best_tree = copy.deepcopy(tmpTree)
+			the_best_tree_accuracy = tmpTree_accuracy
 	return the_best_tree
 
 
@@ -343,6 +317,11 @@ print("Pruning the tree...")
 tree_ig_best = post_pruning_decision_tree(tree_ig)
 print("After pruning, tree accuracy on test set:", tree_ig_best.evaluate_accuracy(test_set))
 print()
+print("Before pruning, tree accuracy on validation set:", tree_ig.evaluate_accuracy(validation_set))
+print("After pruning, tree accuracy on validation set:", tree_ig_best.evaluate_accuracy(validation_set))
+print("The second value should always be greater.")
+print()
+
 # print out the tree
 if to_print == "yes":
 	print("Printing out the original tree")
