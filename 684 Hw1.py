@@ -369,7 +369,7 @@ for (K, L) in [(10, 10), (10, 30), (10, 100), (20, 10), (20, 1000), (50, 100), (
 
 	
 	tree_iv_best = post_pruning_decision_tree(tree_iv, K, L)
-	print("IV Pruned Accuracy", tree_ig_best.evaluate_accuracy(test_set))
+	print("IV Pruned Accuracy", tree_iv_best.evaluate_accuracy(test_set))
 	print("= * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * =")
 
 print("======================================================================================")
