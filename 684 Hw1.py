@@ -149,9 +149,9 @@ class Tree:
 			First - use calculate_entropy() or calculate_variance_impurity() for each group of data to get its entropy or variance impurity, then an anonymous lambda function is used to get the ratio for each group.
 			data_aggregate is the dataFrame storing these values.''' 
 			if heuristic == "ig":
-				data_aggregate = data_split.agg({target_attribute : [self.calculate_entropy, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
+				data_aggregate = data_split.agg({target_attribute : [self.calculate_entropy, lambda group: len(group)/len(data_with_targets)]})[target_attribute]
 			else:
-				data_aggregate = data_split.agg({target_attribute : [self.calculate_variance_impurity, lambda group: len(group)/len(data_with_targets)] })[target_attribute]
+				data_aggregate = data_split.agg({target_attribute : [self.calculate_variance_impurity, lambda group: len(group)/len(data_with_targets)]})[target_attribute]
 			# Values are either the entropy or variance impurity
 			data_aggregate.columns = ['Values', 'Ratios']
 			'''Second - an weighted sum of the product of the entropy or variance impurity and the ratio of each value of this feature'''
@@ -312,14 +312,11 @@ print("Building the tree using the training data by information gain...")
 tree_ig = Tree()
 tree_ig.build_tree("ig")
 print()
+print("Before pruning, tree accuracy on training set:", tree_ig.evaluate_accuracy(training_set))
 print("Before pruning, tree accuracy on test data set:", tree_ig.evaluate_accuracy(test_set))
 print("Pruning the tree...")
 tree_ig_best = post_pruning_decision_tree(tree_ig)
 print("After pruning, tree accuracy on test set:", tree_ig_best.evaluate_accuracy(test_set))
-print()
-print("Before pruning, tree accuracy on validation set:", tree_ig.evaluate_accuracy(validation_set))
-print("After pruning, tree accuracy on validation set:", tree_ig_best.evaluate_accuracy(validation_set))
-print("The second value should always be greater.")
 print()
 
 # print out the tree
@@ -337,6 +334,7 @@ print("Building the tree using the training data by variance impurity...")
 tree_vi = Tree()
 tree_vi.build_tree("vi")
 print()
+print("Before pruning, tree accuracy on training set:", tree_vi.evaluate_accuracy(training_set))
 print("Before pruning, tree accuracy on test data set:", tree_vi.evaluate_accuracy(test_set))
 print("Pruning the tree...")
 tree_vi_best = post_pruning_decision_tree(tree_vi)
