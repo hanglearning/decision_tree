@@ -9,10 +9,10 @@ import random
 # Input parameters
 # L = int(sys.argv[1])
 # K = int(sys.argv[2])
-training_set_path = sys.argv[3]
-validation_set_path = sys.argv[4]
-test_set_path = sys.argv[5]
-to_print = sys.argv[6]
+training_set_path = "/Users/chenhang91/Downloads/data_sets1/training_set.csv"
+validation_set_path = "/Users/chenhang91/Downloads/data_sets1/validation_set.csv"
+test_set_path = "/Users/chenhang91/Downloads/data_sets1/test_set.csv"
+to_print = "no"
 
 # read in the training data
 training_set = pd.read_csv(training_set_path ,delimiter=',')
@@ -348,34 +348,34 @@ def post_pruning_decision_tree(decision_tree, K, L):
 # 	print("Printing out the post pruned tree")
 # 	tree_vi_best.print_decision_tree("vi")
 
-tree_ig = Tree()
-tree_ig.build_tree("ig")
+# tree_ig = Tree()
+# tree_ig.build_tree("ig")
 tree_iv = Tree()
 tree_iv.build_tree("iv")
 print("Before pruning")
 print("IG training :", tree_ig.evaluate_accuracy(training_set))
-print("IG test:", tree_ig.evaluate_accuracy(test_set))
-print("IV training :", tree_iv.evaluate_accuracy(training_set))
-print("IV test:", tree_iv.evaluate_accuracy(test_set))
+# print("IG test:", tree_ig.evaluate_accuracy(test_set))
+# print("IV training :", tree_iv.evaluate_accuracy(training_set))
+# print("IV test:", tree_iv.evaluate_accuracy(test_set))
 
-print("======================================================================================")
-for (K, L) in [(10, 10), (10, 30), (10, 100), (20, 10), (20, 1000), (50, 100), (50, 1000), (100, 100), (100, 1000), (1000, 3000)]:
+# print("======================================================================================")
+# for (K, L) in [(10, 10), (10, 30), (10, 100), (20, 10), (20, 1000), (50, 100), (50, 1000), (100, 100), (100, 1000), (1000, 3000)]:
 
-	print("K", K, "L", L)
-	print()	
-	tree_ig_best = post_pruning_decision_tree(tree_ig, K, L)
-	print("IG Pruned Accuracy", tree_ig_best.evaluate_accuracy(test_set))
-	print()
+# 	print("K", K, "L", L)
+# 	print()	
+# 	tree_ig_best = post_pruning_decision_tree(tree_ig, K, L)
+# 	print("IG Pruned Accuracy", tree_ig_best.evaluate_accuracy(test_set))
+# 	print()
 
 	
-	tree_iv_best = post_pruning_decision_tree(tree_iv, K, L)
-	print("IV Pruned Accuracy", tree_iv_best.evaluate_accuracy(test_set))
-	print("= * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * =")
+# 	tree_iv_best = post_pruning_decision_tree(tree_iv, K, L)
+# 	print("IV Pruned Accuracy", tree_iv_best.evaluate_accuracy(test_set))
+# 	print("= * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * = * =")
 
-print("======================================================================================")
+# print("======================================================================================")
 
-print("Sanity check before pruning")
-print("IG training :", tree_ig.evaluate_accuracy(training_set))
-print("IG test:", tree_ig.evaluate_accuracy(test_set))
-print("IV training :", tree_iv.evaluate_accuracy(training_set))
-print("IV test:", tree_iv.evaluate_accuracy(test_set))
+# print("Sanity check before pruning")
+# print("IG training :", tree_ig.evaluate_accuracy(training_set))
+# print("IG test:", tree_ig.evaluate_accuracy(test_set))
+# print("IV training :", tree_iv.evaluate_accuracy(training_set))
+# print("IV test:", tree_iv.evaluate_accuracy(test_set))
